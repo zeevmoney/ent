@@ -811,12 +811,6 @@ func (b *enumBuilder) Annotations(annotations ...schema.Annotation) *enumBuilder
 	return b
 }
 
-// Validate adds a validator for this field. Operation fails if the validation fails.
-func (b *enumBuilder) Validate(fn func(string) error) *enumBuilder {
-	b.desc.Validators = append(b.desc.Validators, fn)
-	return b
-}
-
 // EnumValues defines the interface for getting the enum values.
 type EnumValues interface {
 	Values() []string
