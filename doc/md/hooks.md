@@ -193,9 +193,44 @@ func (Card) Hooks() []ent.Hook {
 
 ## Hooks Registration
 
-When using [**schema hooks**](#schema-hooks), there's a chance of a cyclic import between the schema package,
+When using [**schema hooks**](#schema-hooks), there is a chance of a cyclic import between the schema package,
 and the generated ent package. To avoid this scenario, ent generates an `ent/runtime` package which is responsible
-for registering the schema-hooks at runtime.
+for registering the schema-hooks at runtime.  
+> When using [Privacy](privacy.md) you may encounter the same problem, so this example will address both of them.
+
+In order for ent to generate code correctly, and do the "schema stitching" inside `ent/runtime`,
+before adding any `Hooks()` or `Policy()` that cause a cyclic import, the following steps should be preformed:
+
+- assuming you have a new `ent/schema` or a schema without `Hooks()` or `Policy()`.
+- create an empty `Hooks()` (or a basic `Policy()`), in your `ent/schema`:  
+
+```go
+func (Card) Hooks() []ent.Hook {
+    return []ent.Hook{
+        func(mutator ent.Mutator) ent.Mutator {
+            return nil
+        },
+    }
+}
+
+// This will only work after you've generated your initial schema with the flag: --feature privacy.
+func (Card) Policy() ent.Policy {
+    return privacy.Policy{
+    	Mutation: privacy.MutationPolicy{
+            privacy.AlwaysDenyRule(),
+        },
+    }   
+}
+```
+
+- Then run:
+
+```console
+go generate ./ent
+```
+
+At this point ent will preform the needed "schema stitching" inside `ent/runtime`, so `Hooks()` or `Policy()` (privacy)
+can be added as needed - even if they are supposed to cause cyclic import.
 
 :::important
 Users **MUST** import the `ent/runtime` in order to register the schema hooks.

@@ -107,10 +107,13 @@ func main() {
 }
 ```
 
-:::important
-You should notice that, similar to [schema hooks](hooks.md#hooks-registration), if you use the **`Policy`** option in your schema,
-you **MUST** add the following import in the main package, because a circular import is possible between the schema package,
-and the generated ent package:
+:::important 
+You should notice that, similar to [schema hooks](hooks.md#hooks-registration), if you use the **`Policy`** option in your schema,    
+because a circular import is possible between the schema package and the generated `ent` package, you **MUST** do the following:
+
+- Make sure that `ent` does the schema stitching correctly by following the instructions in [schema hooks](hooks.md#hooks-registration)
+- Eliminate the circular import by importing the `runtime` package as early as possible inside main or test.  
+
 
 ```go
 import _ "<project>/ent/runtime"
