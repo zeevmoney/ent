@@ -12,6 +12,7 @@ import (
 	"math"
 
 	"ariga.io/atlas/sql/migrate"
+
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/schema/field"

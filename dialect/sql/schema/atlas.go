@@ -14,6 +14,7 @@ import (
 
 	"ariga.io/atlas/sql/migrate"
 	"ariga.io/atlas/sql/schema"
+
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/schema/field"
@@ -22,7 +23,7 @@ import (
 type (
 	// Differ is the interface that wraps the Diff method.
 	Differ interface {
-		// Diff creates the given tables in the database.
+		// Diff returns a list of changes that construct a migration plan.
 		Diff(current, desired *schema.Schema) ([]schema.Change, error)
 	}
 
@@ -97,7 +98,7 @@ const (
 	DropCheck
 )
 
-// Is reports whether c is match the given change king.
+// Is reports whether c is match the given change kind.
 func (k ChangeKind) Is(c ChangeKind) bool {
 	return k == c || k&c != 0
 }
@@ -123,6 +124,7 @@ func filterChanges(skip ChangeKind) DiffHook {
 					case *schema.AddTable:
 						k = AddTable
 					case *schema.ModifyTable:
+						// todo: ask Ariel
 						k = ModifyTable
 						if !skip.Is(k) {
 							c.Changes = f(c.Changes)
@@ -158,7 +160,7 @@ func filterChanges(skip ChangeKind) DiffHook {
 						keep = append(keep, c)
 					}
 				}
-				return
+				return keep
 			}
 			changes, err := next.Diff(current, desired)
 			if err != nil {
@@ -167,6 +169,27 @@ func filterChanges(skip ChangeKind) DiffHook {
 			return f(changes), nil
 		})
 	}
+}
+
+func withoutForeignKeys(next Differ) Differ {
+	return DiffFunc(func(current, desired *schema.Schema) ([]schema.Change, error) {
+		changes, err := next.Diff(current, desired)
+		if err != nil {
+			return nil, err
+		}
+		// what about AddForeignKey?
+		for _, c := range changes {
+			switch c := c.(type) {
+			case *schema.AddTable:
+				c.T.ForeignKeys = nil
+			case *schema.DropTable:
+				c.T.ForeignKeys = nil
+			case *schema.ModifyTable:
+				c.T.ForeignKeys = nil
+			}
+		}
+		return changes, nil
+	})
 }
 
 type (
@@ -266,9 +289,6 @@ func (m *Migrate) setupAtlas() error {
 	if !m.atlas.enabled {
 		return nil
 	}
-	if !m.withForeignKeys {
-		return errors.New("sql/schema: WithForeignKeys(false) does not work in Atlas migration")
-	}
 	if m.withFixture {
 		return errors.New("sql/schema: WithFixture(true) does not work in Atlas migration")
 	}
@@ -284,6 +304,9 @@ func (m *Migrate) setupAtlas() error {
 	}
 	if k == NoChange {
 		m.atlas.diff = append(m.atlas.diff, filterChanges(k))
+	}
+	if !m.withForeignKeys {
+		m.atlas.diff = append(m.atlas.diff, withoutForeignKeys)
 	}
 	if m.atlas.dir != nil && m.atlas.fmt == nil {
 		m.atlas.fmt = migrate.DefaultFormatter

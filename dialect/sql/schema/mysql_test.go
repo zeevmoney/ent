@@ -20,6 +20,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	// Query to list system variables.
+	atlasVariablesQuery = "SELECT @@version, @@collation_server, @@character_set_server"
+
+	// Query to list database schemas.
+	atlasSchemasQuery = "SELECT `SCHEMA_NAME`, `DEFAULT_CHARACTER_SET_NAME`, `DEFAULT_COLLATION_NAME` from `INFORMATION_SCHEMA`.`SCHEMATA` WHERE `SCHEMA_NAME` NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys') ORDER BY `SCHEMA_NAME`"
+
+	// Query to list specific database schemas.
+	AtlasschemasQueryArgs = "SELECT `SCHEMA_NAME`, `DEFAULT_CHARACTER_SET_NAME`, `DEFAULT_COLLATION_NAME` from `INFORMATION_SCHEMA`.`SCHEMATA` WHERE `SCHEMA_NAME` %s ORDER BY `SCHEMA_NAME`"
+)
+
 func TestMySQL_Create(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1352,6 +1363,63 @@ func TestMySQL_Create(t *testing.T) {
 					WithArgs("users").
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec(escape("ALTER TABLE `users` AUTO_INCREMENT = 0")).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name: "create new table using atlas with foreign key disabled ",
+			options: []MigrateOption{
+				WithAtlas(true),
+				WithForeignKeys(false),
+			},
+			tables: func() []*Table {
+				var (
+					c1 = []*Column{
+						{Name: "id", Type: field.TypeInt, Increment: true},
+						{Name: "name", Type: field.TypeString, Nullable: true},
+						{Name: "created_at", Type: field.TypeTime},
+					}
+					c2 = []*Column{
+						{Name: "id", Type: field.TypeInt, Increment: true},
+						{Name: "name", Type: field.TypeString},
+						{Name: "owner_id", Type: field.TypeInt, Nullable: true},
+					}
+					t1 = &Table{
+						Name:       "users",
+						Columns:    c1,
+						PrimaryKey: c1[0:1],
+					}
+					t2 = &Table{
+						Name:       "pets",
+						Columns:    c2,
+						PrimaryKey: c2[0:1],
+						ForeignKeys: []*ForeignKey{
+							{
+								Symbol:     "pets_owner",
+								Columns:    c2[2:],
+								RefTable:   t1,
+								RefColumns: c1[0:1],
+								OnDelete:   Cascade,
+							},
+						},
+					}
+				)
+				return []*Table{t1, t2}
+			}(),
+			before: func(mock mysqlMock) {
+				mock.start("5.7.23")
+				rs := sqlmock.NewRows([]string{"@@version", "@@collation_server", "@@character_set_server"}).FromCSVString("5,utf8_general_ci,utf8")
+				mock.ExpectQuery(escape(atlasVariablesQuery)).WillReturnRows(rs)
+				rs = sqlmock.NewRows([]string{"@@version", "@@collation_server", "@@character_set_server"}).FromCSVString("test,utf8mb4,utf8mb4_unicode_ci")
+				mock.ExpectQuery(escape(atlasSchemasQuery)).WillReturnRows(rs)
+				mock.ExpectQuery(escape(AtlasschemasQueryArgs)).WillReturnRows(rs)
+
+				mock.tableExists("users", false)
+				mock.ExpectExec(escape("CREATE TABLE IF NOT EXISTS `users`(`id` bigint AUTO_INCREMENT NOT NULL, `name` varchar(255) NULL, `created_at` timestamp NULL, PRIMARY KEY(`id`)) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin")).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.tableExists("pets", false)
+				mock.ExpectExec(escape("CREATE TABLE IF NOT EXISTS `pets`(`id` bigint AUTO_INCREMENT NOT NULL, `name` varchar(255) NOT NULL, `owner_id` bigint NULL, PRIMARY KEY(`id`)) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin")).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectCommit()
 			},
