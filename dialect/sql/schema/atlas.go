@@ -124,7 +124,6 @@ func filterChanges(skip ChangeKind) DiffHook {
 					case *schema.AddTable:
 						k = AddTable
 					case *schema.ModifyTable:
-						// todo: ask Ariel
 						k = ModifyTable
 						if !skip.Is(k) {
 							c.Changes = f(c.Changes)
