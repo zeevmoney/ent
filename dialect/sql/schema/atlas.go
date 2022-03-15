@@ -176,7 +176,6 @@ func withoutForeignKeys(next Differ) Differ {
 		if err != nil {
 			return nil, err
 		}
-		// what about AddForeignKey?
 		for _, c := range changes {
 			switch c := c.(type) {
 			case *schema.AddTable:
